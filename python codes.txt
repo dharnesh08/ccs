@@ -1,0 +1,532 @@
+Cipher:
+def caesar_encrypt(text, shift):
+    result = ""
+
+    for char in text:
+        if char.isalpha():
+            # Shift character by shift positions
+            offset = 65 if char.isupper() else 97
+            encrypted_char = chr((ord(char) - offset + shift) % 26 + offset)
+            result += encrypted_char
+        else:
+            result += char  # Non-alphabetic characters remain unchanged
+
+    return result
+
+def caesar_decrypt(cipher_text, shift):
+    return caesar_encrypt(cipher_text, -shift)
+
+# Example usage
+plain_text = "Hello, World!"
+shift = 3
+
+encrypted = caesar_encrypt(plain_text, shift)
+decrypted = caesar_decrypt(encrypted, shift)
+
+print(f"Original:  {plain_text}")
+print(f"Encrypted: {encrypted}")
+print(f"Decrypted: {decrypted}")
+
+Playfair cipher:
+import string
+
+def generate_key_matrix(key):
+    key = key.upper().replace('J', 'I')
+    seen = set()
+    matrix = []
+
+    for char in key + string.ascii_uppercase:
+        if char.isalpha() and char not in seen:
+            seen.add(char)
+            matrix.append(char)
+
+    return [matrix[i:i+5] for i in range(0, 25, 5)]
+
+def find_position(matrix, char):
+    for i, row in enumerate(matrix):
+        if char in row:
+            return i, row.index(char)
+    return None
+
+def prepare_text(text):
+    text = text.upper().replace('J', 'I')
+    cleaned = ''.join(filter(str.isalpha, text))
+
+    i = 0
+    pairs = []
+    while i < len(cleaned):
+        a = cleaned[i]
+        b = 'X'
+        if i + 1 < len(cleaned):
+            b = cleaned[i+1]
+            if a == b:
+                b = 'X'
+                i += 1
+            else:
+                i += 2
+        else:
+            i += 1
+        pairs.append((a, b))
+    return pairs
+
+def encrypt_pair(a, b, matrix):
+    row1, col1 = find_position(matrix, a)
+    row2, col2 = find_position(matrix, b)
+
+    if row1 == row2:
+        return matrix[row1][(col1 + 1) % 5], matrix[row2][(col2 + 1) % 5]
+    elif col1 == col2:
+        return matrix[(row1 + 1) % 5][col1], matrix[(row2 + 1) % 5][col2]
+    else:
+        return matrix[row1][col2], matrix[row2][col1]
+
+def decrypt_pair(a, b, matrix):
+    row1, col1 = find_position(matrix, a)
+    row2, col2 = find_position(matrix, b)
+
+    if row1 == row2:
+        return matrix[row1][(col1 - 1) % 5], matrix[row2][(col2 - 1) % 5]
+    elif col1 == col2:
+        return matrix[(row1 - 1) % 5][col1], matrix[(row2 - 1) % 5][col2]
+    else:
+        return matrix[row1][col2], matrix[row2][col1]
+
+def playfair_encrypt(text, key):
+    matrix = generate_key_matrix(key)
+    pairs = prepare_text(text)
+    encrypted = [encrypt_pair(a, b, matrix) for a, b in pairs]
+    return ''.join(a + b for a, b in encrypted)
+
+def playfair_decrypt(cipher_text, key):
+    matrix = generate_key_matrix(key)
+    pairs = prepare_text(cipher_text)
+    decrypted = [decrypt_pair(a, b, matrix) for a, b in pairs]
+    return ''.join(a + b for a, b in decrypted)
+
+# Example usage
+key = "MONARCHY"
+plaintext = "HELLO WORLD"
+
+ciphertext = playfair_encrypt(plaintext, key)
+decrypted = playfair_decrypt(ciphertext, key)
+
+print("Key Matrix:")
+for row in generate_key_matrix(key):
+    print(row)
+print(f"\nPlaintext : {plaintext}")
+print(f"Encrypted : {ciphertext}")
+print(f"Decrypted : {decrypted}")
+
+
+Hill cipher
+import numpy as np
+from sympy import Matrix
+
+def mod_inverse_matrix(matrix, modulus):
+    """Return the modular inverse of a matrix under given modulus using sympy."""
+    try:
+        matrix_mod_inv = Matrix(matrix).inv_mod(modulus)
+        return np.array(matrix_mod_inv).astype(int)
+    except:
+        raise ValueError("Matrix is not invertible under mod", modulus)
+
+def text_to_numbers(text):
+    return [ord(c) - ord('A') for c in text.upper() if c.isalpha()]
+
+def numbers_to_text(numbers):
+    return ''.join(chr(n % 26 + ord('A')) for n in numbers)
+
+def pad_text(text, block_size):
+    while len(text) % block_size != 0:
+        text += 'X'
+    return text
+
+def encrypt_hill(plaintext, key_matrix):
+    block_size = key_matrix.shape[0]
+    plaintext = pad_text(plaintext.upper().replace(" ", ""), block_size)
+    plaintext_nums = text_to_numbers(plaintext)
+
+    encrypted = []
+    for i in range(0, len(plaintext_nums), block_size):
+        block = np.array(plaintext_nums[i:i+block_size])
+        cipher_block = np.dot(key_matrix, block) % 26
+        encrypted.extend(cipher_block)
+
+    return numbers_to_text(encrypted)
+
+def decrypt_hill(ciphertext, key_matrix):
+    block_size = key_matrix.shape[0]
+    ciphertext_nums = text_to_numbers(ciphertext)
+    inverse_matrix = mod_inverse_matrix(key_matrix, 26)
+
+    decrypted = []
+    for i in range(0, len(ciphertext_nums), block_size):
+        block = np.array(ciphertext_nums[i:i+block_size])
+        plain_block = np.dot(inverse_matrix, block) % 26
+        decrypted.extend(plain_block)
+
+    return numbers_to_text(decrypted)
+
+# Example usage
+key_matrix = np.array([[3, 3],
+                       [2, 5]])  # Should be invertible mod 26
+
+plaintext = "HELLO"
+ciphertext = encrypt_hill(plaintext, key_matrix)
+decrypted = decrypt_hill(ciphertext, key_matrix)
+
+print(f"Plaintext : {plaintext}")
+print(f"Encrypted : {ciphertext}")
+print(f"Decrypted : {decrypted}")
+
+Rail fence-Row major
+def encrypt_rail_fence(text, rails):
+    text = text.replace(" ", "")
+    fence = [['' for _ in range(len(text))] for _ in range(rails)]
+
+    row = 0
+    direction = 1  # 1 = down, -1 = up
+
+    for col, char in enumerate(text):
+        fence[row][col] = char
+        row += direction
+
+        if row == 0 or row == rails - 1:
+            direction *= -1
+
+    # Row-major read
+    encrypted = ''
+    for r in fence:
+        encrypted += ''.join(r)
+
+    return encrypted
+
+
+def decrypt_rail_fence(cipher, rails):
+    # Create the same zigzag pattern with placeholders
+    pattern = [['' for _ in range(len(cipher))] for _ in range(rails)]
+
+    row = 0
+    direction = 1
+
+    # Mark positions with '*'
+    for col in range(len(cipher)):
+        pattern[row][col] = '*'
+        row += direction
+
+        if row == 0 or row == rails - 1:
+            direction *= -1
+
+    # Fill in the cipher text
+    index = 0
+    for r in range(rails):
+        for c in range(len(cipher)):
+            if pattern[r][c] == '*' and index < len(cipher):
+                pattern[r][c] = cipher[index]
+                index += 1
+
+    # Read in zigzag manner
+    result = ''
+    row = 0
+    direction = 1
+
+    for col in range(len(cipher)):
+        result += pattern[row][col]
+        row += direction
+
+        if row == 0 or row == rails - 1:
+            direction *= -1
+
+    return result
+
+
+# Example usage
+plaintext = "WE ARE DISCOVERED RUN"
+rails = 3
+
+encrypted = encrypt_rail_fence(plaintext, rails)
+decrypted = decrypt_rail_fence(encrypted, rails)
+
+print(f"Plaintext : {plaintext}")
+print(f"Encrypted : {encrypted}")
+print(f"Decrypted : {decrypted}")
+
+Rail fence- import math
+
+def encrypt_rail_fence_column_major(plaintext, rails):
+    plaintext = plaintext.replace(" ", "").upper()
+    n = len(plaintext)
+    columns = math.ceil(n / rails)
+
+    # Fill the matrix row-wise
+    matrix = [['' for _ in range(columns)] for _ in range(rails)]
+    idx = 0
+
+    for r in range(rails):
+        for c in range(columns):
+            if idx < n:
+                matrix[r][c] = plaintext[idx]
+                idx += 1
+
+    # Read column by column
+    encrypted = ''
+    for c in range(columns):
+        for r in range(rails):
+            if matrix[r][c] != '':
+                encrypted += matrix[r][c]
+
+    return encrypted
+
+def decrypt_rail_fence_column_major(ciphertext, rails):
+    ciphertext = ciphertext.replace(" ", "").upper()
+    n = len(ciphertext)
+    columns = math.ceil(n / rails)
+
+    # Determine number of filled cells per row
+    full_cells = n
+    matrix = [['' for _ in range(columns)] for _ in range(rails)]
+
+    # Fill the matrix column by column
+    idx = 0
+    for c in range(columns):
+        for r in range(rails):
+            if idx < n:
+                matrix[r][c] = '*'
+                idx += 1
+
+    # Now fill actual characters row-wise
+    idx = 0
+    for r in range(rails):
+        for c in range(columns):
+            if matrix[r][c] == '*':
+                matrix[r][c] = ciphertext[idx]
+                idx += 1
+
+    # Read row-wise to decrypt
+    decrypted = ''
+    for r in range(rails):
+        for c in range(columns):
+            if matrix[r][c] != '':
+                decrypted += matrix[r][c]
+
+    return decrypted
+
+# Example usage
+plaintext = "INFORMATIONSECURITY"
+rails = 4
+
+ciphertext = encrypt_rail_fence_column_major(plaintext, rails)
+decrypted = decrypt_rail_fence_column_major(ciphertext, rails)
+
+print(f"Plaintext : {plaintext}")
+print(f"Encrypted : {ciphertext}")
+print(f"Decrypted : {decrypted}")
+
+DES algorithm
+from Crypto.Cipher import DES
+from Crypto.Util.Padding import pad, unpad
+import base64
+
+def des_encrypt(plain_text, key):
+    # Ensure key is 8 bytes
+    key = key.encode('utf-8')
+    if len(key) != 8:
+        raise ValueError("Key must be exactly 8 bytes long.")
+
+    # Create DES cipher
+    cipher = DES.new(key, DES.MODE_ECB)
+
+    # Pad and encrypt
+    padded_text = pad(plain_text.encode('utf-8'), DES.block_size)
+    encrypted_bytes = cipher.encrypt(padded_text)
+
+    # Encode to base64 for readable ciphertext
+    return base64.b64encode(encrypted_bytes).decode('utf-8')
+
+def des_decrypt(cipher_text, key):
+    key = key.encode('utf-8')
+    if len(key) != 8:
+        raise ValueError("Key must be exactly 8 bytes long.")
+
+    cipher = DES.new(key, DES.MODE_ECB)
+
+    # Decode base64 and decrypt
+    encrypted_bytes = base64.b64decode(cipher_text)
+    decrypted_bytes = unpad(cipher.decrypt(encrypted_bytes), DES.block_size)
+
+    return decrypted_bytes.decode('utf-8')
+
+# Example usage
+key = "8bytekey"  # Key must be exactly 8 bytes
+text = "HelloDES"
+
+encrypted = des_encrypt(text, key)
+decrypted = des_decrypt(encrypted, key)
+
+print(f"Plaintext : {text}")
+print(f"Encrypted : {encrypted}")
+print(f"Decrypted : {decrypted}")
+
+AES Algorithm:
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
+import base64
+
+def aes_encrypt(plain_text, key):
+    # Ensure key is 16, 24, or 32 bytes for AES-128, AES-192, AES-256
+    key = key.encode('utf-8')
+    if len(key) not in [16, 24, 32]:
+        raise ValueError("Key must be 16, 24, or 32 bytes long.")
+
+    # Generate random IV (initialization vector)
+    iv = get_random_bytes(16)
+
+    # Create AES cipher
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+
+    # Pad plaintext and encrypt
+    padded_text = pad(plain_text.encode('utf-8'), AES.block_size)
+    encrypted = cipher.encrypt(padded_text)
+
+    # Return IV + ciphertext encoded in base64
+    return base64.b64encode(iv + encrypted).decode('utf-8')
+
+def aes_decrypt(cipher_text, key):
+    key = key.encode('utf-8')
+    if len(key) not in [16, 24, 32]:
+        raise ValueError("Key must be 16, 24, or 32 bytes long.")
+
+    # Decode from base64 and split IV and encrypted message
+    raw = base64.b64decode(cipher_text)
+    iv = raw[:16]
+    encrypted = raw[16:]
+
+    # Create cipher and decrypt
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    decrypted = unpad(cipher.decrypt(encrypted), AES.block_size)
+
+    return decrypted.decode('utf-8')
+
+# Example usage
+key = "thisisasecretkey"  # 16 bytes for AES-128
+text = "HelloAESAlgorithm"
+
+encrypted = aes_encrypt(text, key)
+decrypted = aes_decrypt(encrypted, key)
+
+print(f"Plaintext : {text}")
+print(f"Encrypted : {encrypted}")
+print(f"Decrypted : {decrypted}")
+
+RSA
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+import base64
+
+# Generate RSA key pair (public + private)
+def generate_keys():
+    key = RSA.generate(2048)
+    private_key = key.export_key()
+    public_key = key.publickey().export_key()
+    return private_key, public_key
+
+# Encrypt using RSA public key
+def rsa_encrypt(plain_text, public_key):
+    key = RSA.import_key(public_key)
+    cipher = PKCS1_OAEP.new(key)
+    encrypted = cipher.encrypt(plain_text.encode('utf-8'))
+    return base64.b64encode(encrypted).decode('utf-8')
+
+# Decrypt using RSA private key
+def rsa_decrypt(cipher_text, private_key):
+    key = RSA.import_key(private_key)
+    cipher = PKCS1_OAEP.new(key)
+    decrypted = cipher.decrypt(base64.b64decode(cipher_text))
+    return decrypted.decode('utf-8')
+
+# Example usage
+private_key, public_key = generate_keys()
+
+message = "Hello RSA Encryption"
+encrypted_message = rsa_encrypt(message, public_key)
+decrypted_message = rsa_decrypt(encrypted_message, private_key)
+
+print("Original Message :", message)
+print("Encrypted Message:", encrypted_message)
+print("Decrypted Message:", decrypted_message)
+
+Diffle
+import random
+
+# Large prime number and primitive root (public values)
+p = 23     # Prime modulus
+g = 5      # Primitive root modulo p
+
+# Alice's private key (a secret)
+a = random.randint(1, p - 2)
+A = pow(g, a, p)  # Alice's public key
+
+# Bob's private key (a secret)
+b = random.randint(1, p - 2)
+B = pow(g, b, p)  # Bob's public key
+
+# Shared secret computation
+# Alice computes
+shared_secret_alice = pow(B, a, p)
+
+# Bob computes
+shared_secret_bob = pow(A, b, p)
+
+# They should be equal
+print(f"Public Prime (p): {p}")
+print(f"Primitive Root (g): {g}")
+print(f"Alice's Private Key: {a}")
+print(f"Bob's Private Key: {b}")
+print(f"Alice's Public Key (A): {A}")
+print(f"Bob's Public Key (B): {B}")
+print(f"Alice's Shared Secret: {shared_secret_alice}")
+print(f"Bob's Shared Secret: {shared_secret_bob}")
+print(f"Keys Match: {shared_secret_alice == shared_secret_bob}")
+
+
+SHA 1
+import hashlib
+
+def generate_sha1_hash(message):
+    # Create a SHA-1 hash object
+    sha1 = hashlib.sha1()
+
+    # Update the object with the bytes of the message
+    sha1.update(message.encode('utf-8'))
+
+    # Return the hexadecimal digest
+    return sha1.hexdigest()
+
+# Example usage
+message = "Hello SHA1 Algorithm"
+digest = generate_sha1_hash(message)
+
+print("Input Message :", message)
+print("SHA-1 Digest  :", digest)
+
+MDS5
+import hashlib
+
+def generate_md5_hash(message):
+    # Create an MD5 hash object
+    md5 = hashlib.md5()
+
+    # Update the object with the bytes of the message
+    md5.update(message.encode('utf-8'))
+
+    # Return the hexadecimal digest (32 characters)
+    return md5.hexdigest()
+
+# Example usage
+message = "Hello MD5 Algorithm"
+hash_value = generate_md5_hash(message)
+
+print("Input Message :", message)
+print("MD5 Hash      :", hash_value)
+
